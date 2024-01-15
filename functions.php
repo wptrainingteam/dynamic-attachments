@@ -9,6 +9,10 @@
  * @license   http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
  */
 
+// Enable attachment pages for testing purposes with new installs.
+// Important! This should not be shipped with the theme.
+add_filter( 'pre_option_wp_attachment_pages_enabled', '__return_true' );
+
 // This is not needed if your theme has a `templates/attachment.html` file.
 // WordPress will automatically remove it.
 remove_filter( 'the_content', 'prepend_attachment' );
@@ -24,17 +28,13 @@ add_filter( 'render_block', 'themeslug_render_block', 10, 3 );
  */
 function themeslug_render_block( $block_content, $block, $instance ) {
 
-	// Bail early if not `core/post-content` block or there's no post ID.
-	if ( 'core/post-content' !== $block['blockName'] || empty( $instance->context['postId'] ) ) {
-		return $block_content;
-	}
-
-	// Get the post object.
-	$post = get_post( $instance->context['postId'] );
-
-	// Bail if we don't have a post object or are not specifically viewing
+	// Bail early if there's no post ID or not specifically viewing
 	// the attachment page for this specific post.
-	if ( ! $post instanceof WP_Post || ! is_attachment( $post->ID ) ) {
+	if (
+		'core/post-content' !== $block['blockName']
+		|| empty( $instance->context['postId'] )
+		|| ! is_attachment( $instance->context['postId'] )
+	) {
 		return $block_content;
 	}
 
@@ -42,10 +42,10 @@ function themeslug_render_block( $block_content, $block, $instance ) {
 	$partials = [];
 	$html     = '';
 
-	// Checks if the attachment is one of supported types and sets
-	// the filename based on that type.
-	foreach ( [ 'image', 'video', 'audio'] as $type ) {
-		if ( wp_attachment_is( $type, $post ) ) {
+	// Checks if the attachment is one of supported types. If it is, add it
+	// to the array of potential partial templates.
+	foreach ( [ 'image', 'video', 'audio' ] as $type ) {
+		if ( wp_attachment_is( $type, $instance->context['postId'] ) ) {
 			$partials[] = "partials/attachment-media-{$type}.php";
 			break;
 		}
@@ -54,16 +54,29 @@ function themeslug_render_block( $block_content, $block, $instance ) {
 	// Add fallback partial template.
 	$partials[] = 'partials/attachment-media.php';
 
-	// Gets a partial (essentially a dynamic pattern) based on the
-	// attachment type. Must be valid block content.
+	// Enable output buffering to capture the output of the partial template.
 	ob_start();
-	locate_template( $partials, true, false );
-	$media = ob_get_clean();
 
-	// Parse and render the blocks.
-	foreach ( parse_blocks( $media ) as $media_block ) {
-		$html .= render_block( $media_block );
+	// Find the attachment partial template and pass the post ID along as
+	// an argument.
+	locate_template( $partials, true, false, [
+		'post_id' => $instance->context['postId']
+	] );
+
+	// Get the content of the buffer and disable it.
+	$block_markup = ob_get_clean();
+
+	// If there's no block markup, return the original block content.
+	if ( ! $block_markup ) {
+		return $block_content;
 	}
 
+	// Parse the block markup. Then, loop through the array of parsed blocks
+	// and render them.
+	foreach ( parse_blocks( $block_markup ) as $parsed_block ) {
+		$html .= render_block( $parsed_block );
+	}
+
+	// Return the new html, prepending the original content.
 	return $html . $block_content;
 }

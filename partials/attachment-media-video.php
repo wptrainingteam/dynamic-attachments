@@ -1,7 +1,7 @@
 <?php
 // Get dynamic attachment data.
-$caption = wp_get_attachment_caption( get_the_ID() );
-$src     = wp_get_attachment_url( get_the_ID() );
+$caption = wp_get_attachment_caption( $args['post_id'] );
+$src     = wp_get_attachment_url( $args['post_id'] );
 ?>
 <!-- wp:group {"align":"full","layout":{"type":"constrained"}} -->
 <div class="wp-block-group alignfull">
